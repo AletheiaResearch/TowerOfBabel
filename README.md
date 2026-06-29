@@ -76,6 +76,18 @@ print(ledger.stats())
 compose_usd("textured.glb", "collision.glb", "physics.json", "out/asset.usda", usdz=True)
 ```
 
+## Notebook
+
+An interactive [marimo](https://marimo.io) notebook drives the whole flow — browse the
+library, pick one asset, acquire just that asset, compose its USD/USDz, and preview it
+(textured GLB via `<model-viewer>`, plus a best-effort three.js render of the actual
+`.usdz`, and a download/AR link). It runs entirely against the public Palatial API into a
+local temp dir — **no R2 credentials needed**.
+
+```bash
+uv run --extra notebook marimo edit notebooks/explore.py
+```
+
 ## How it works
 
 For every result of the library search, the tool runs 8 steps and stores both each

@@ -24,6 +24,10 @@ dependencies = [
     "scipy>=1.11",  # trimesh uses it for fast (sparse) vertex-normal computation
 ]
 
+[project.optional-dependencies]
+# Interactive marimo notebooks (notebooks/). Install with: uv sync --extra notebook
+notebook = ["marimo>=0.9"]
+
 [project.scripts]
 usd-pipeline = "usd_pipeline.cli:main"
 
@@ -42,6 +46,8 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# marimo notebooks use a cell-function dependency-injection style of their own.
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

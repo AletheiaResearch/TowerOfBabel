@@ -332,3 +332,48 @@ def resume(
         resume_run_id=run_id,
         install_signal_handlers=install_signal_handlers,
     )
+
+
+def acquire_asset(
+    asset: dict | str,
+    settings: Settings | None = None,
+    *,
+    store: Store,
+    run_id: str | None = None,
+) -> Manifest:
+    """Acquire a single asset (a search-result dict, or an asset id) into ``store``.
+
+    Runs the same 8 per-asset steps as a full run and returns the single-asset manifest.
+    Uses only public Palatial endpoints, so no R2 is needed — pair with a ``LocalStore``
+    for a self-contained, credential-free flow (e.g. in a notebook).
+    """
+    settings = settings or Settings()
+    result = asset if isinstance(asset, dict) else {"_id": asset}
+    asset_id = result.get("_id") or result.get("id")
+    if not asset_id:
+        raise ValueError("asset must be an id or a dict containing '_id'/'id'")
+    run_id = run_id or make_run_id()
+    prefix = f"runs/{run_id}"
+
+    def client_factory() -> PalatialClient:
+        return PalatialClient(
+            base_url=settings.palatial_base_url,
+            cookie=settings.palatial_cookie,
+            timeout=settings.http_timeout,
+            max_retries=settings.http_max_retries,
+        )
+
+    manifest = Manifest.create(
+        store,
+        run_id=run_id,
+        prefix=prefix,
+        bucket=getattr(store, "bucket", "local"),
+        results=[result],
+        source_url="(single asset)",
+        reference_key=f"{prefix}/library-search.json",
+        manifest_key=f"{prefix}/manifest.json",
+        flush_every=settings.manifest_flush_every,
+    )
+    _process_asset(client_factory, store, manifest, prefix, asset_id)
+    manifest.flush()
+    return manifest

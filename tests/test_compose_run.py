@@ -181,6 +181,39 @@ def test_compose_ledger_load_roundtrip(tmp_path):
     assert reloaded.status("a1") == "done"
 
 
+def test_compose_asset_single(tmp_path, monkeypatch):
+    from usd_pipeline.compose_run import compose_asset
+
+    monkeypatch.setattr(compose_run, "compose_usd", _fake_compose)
+    store = LocalStore(tmp_path / "r2")
+    _seed_one(store, "a1", "runs/r1/a1/texture/t.glb", "runs/r1/a1/collision-preview/c.glb")
+    out = compose_asset("a1", _settings(), store=store, run_id="r1", usd_dir=str(tmp_path / "usd"))
+    assert out["status"] == "done"
+    assert (tmp_path / "usd" / "a1" / "a1.usda").exists()
+    assert store.exists("usd/a1/a1.usda")
+
+
+def test_compose_asset_missing_inputs_is_absent(tmp_path, monkeypatch):
+    from usd_pipeline.compose_run import compose_asset
+
+    monkeypatch.setattr(compose_run, "compose_usd", _fake_compose)
+    store = LocalStore(tmp_path / "r2")
+    prefix = "runs/r1"
+    m = Manifest.create(
+        store,
+        run_id="r1",
+        prefix=prefix,
+        bucket="local",
+        results=[{"_id": "a1"}],
+        source_url="x",
+        reference_key=f"{prefix}/library-search.json",
+        manifest_key=f"{prefix}/manifest.json",
+    )
+    m.flush()  # asset present but no acquired inputs
+    out = compose_asset("a1", _settings(), store=store, run_id="r1", usd_dir=str(tmp_path / "usd"))
+    assert out["status"] == "absent"
+
+
 def test_is_safe_segment():
     assert _is_safe_segment("69fdc4a58102b48e9ae52b8d")
     assert not _is_safe_segment("../escape")

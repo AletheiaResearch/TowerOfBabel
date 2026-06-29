@@ -38,6 +38,10 @@ USD_PREFIX = "usd"
 _EMPTY_PHYSICS_FRAGMENTS = ("no 'parts' array", "'parts' is empty")
 
 
+def _is_empty_physics(exc: BaseException) -> bool:
+    return isinstance(exc, ValueError) and any(f in str(exc) for f in _EMPTY_PHYSICS_FRAGMENTS)
+
+
 def _is_safe_segment(asset_id: str) -> bool:
     """True if asset_id is safe as a single path/key segment (no traversal/separators)."""
     return bool(asset_id) and not ({"/", "\\"} & set(asset_id)) and ".." not in asset_id
@@ -282,9 +286,7 @@ def run_compose(
                 exc = fut.exception()
                 if exc is None:
                     ledger.record(asset_id, **fut.result())
-                elif isinstance(exc, ValueError) and any(
-                    frag in str(exc) for frag in _EMPTY_PHYSICS_FRAGMENTS
-                ):
+                elif _is_empty_physics(exc):
                     # empty/missing physics parts: nothing to author -> not composable,
                     # an expected data gap rather than a failure.
                     ledger.record(asset_id, "absent", error=str(exc))
@@ -296,3 +298,54 @@ def run_compose(
         ledger.flush()
 
     return ledger
+
+
+def compose_asset(
+    asset_id: str,
+    settings: Settings | None = None,
+    *,
+    store: Store,
+    run_id: str,
+    usd_dir: str | None = None,
+    inertia: str = "auto",
+    delight: bool = False,
+    flip_v: bool = True,
+    usdz: bool = True,
+) -> dict:
+    """Compose a single already-acquired asset (e.g. one acquired via ``acquire_asset``).
+
+    Returns ``{"status", "keys", "local", ...}`` — ``status`` is ``"done"``, or ``"absent"``
+    when the asset lacks composable inputs / has empty physics.
+    """
+    settings = settings or Settings()
+    usd_dir_path = Path(usd_dir or settings.pipeline_usd_dir).expanduser()
+    usd_dir_path.mkdir(parents=True, exist_ok=True)
+    manifest = Manifest.load(store, f"runs/{run_id}/manifest.json")
+    if manifest is None:
+        raise FileNotFoundError(f"no manifest for run {run_id!r}")
+    asset = manifest.data["assets"].get(asset_id)
+    if asset is None:
+        raise KeyError(f"asset {asset_id!r} is not in run {run_id!r}")
+    inputs = _resolve_inputs(asset)
+    if inputs is None:
+        return {
+            "status": "absent",
+            "keys": {},
+            "local": None,
+            "error": "missing inputs (texture/collision/physics)",
+        }
+    try:
+        return _compose_one(
+            store,
+            usd_dir_path,
+            asset_id,
+            *inputs,
+            inertia=inertia,
+            delight=delight,
+            flip_v=flip_v,
+            usdz=usdz,
+        )
+    except Exception as exc:
+        if _is_empty_physics(exc):
+            return {"status": "absent", "keys": {}, "local": None, "error": str(exc)}
+        raise

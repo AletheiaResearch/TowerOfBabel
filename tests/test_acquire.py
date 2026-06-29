@@ -67,6 +67,21 @@ def test_make_run_id_format():
     assert rid.endswith("Z") and "T" in rid and ":" not in rid
 
 
+@respx.mock
+def test_acquire_asset_single(tmp_path):
+    from usd_pipeline.acquire import acquire_asset
+
+    _mock_asset("a1")  # no library/search needed — acquire_asset targets one id
+    store = LocalStore(tmp_path)
+    m = acquire_asset("a1", _settings(), store=store)
+    rid = m.data["run_id"]
+    assert set(m.asset_ids()) == {"a1"}
+    assert store.exists(f"runs/{rid}/a1/detail.json")
+    assert store.exists(f"runs/{rid}/a1/texture/file_texture.glb")
+    assert m.data["assets"]["a1"]["steps"]["embedded-physics"]["status"] == "done"
+    assert m.stats()["steps_failed"] == 0
+
+
 def test_filename_from_url():
     assert filename_from_url("https://x/y/shape_69.glb?sig=abc") == "shape_69.glb"
     assert filename_from_url("https://x/") == "artifact.bin"
