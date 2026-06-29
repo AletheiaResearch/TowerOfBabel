@@ -25,3 +25,6 @@ __pycache__/
 .mypy_cache/
 dist/
 build/
+
+# marimo session cache
+__marimo__/
