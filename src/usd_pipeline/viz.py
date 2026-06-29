@@ -16,10 +16,11 @@ is a best-effort attempt to render the actual ``.usdz`` via three.js' experiment
 from __future__ import annotations
 
 import base64
+import json
 
 _MODEL_VIEWER_CDN = "https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
 _THREE_CDN = "https://unpkg.com/three@0.160.0/build/three.module.js"
-_THREE_EXAMPLES = "https://unpkg.com/three@0.160.0/examples/jsm"
+_THREE_ADDONS = "https://unpkg.com/three@0.160.0/examples/jsm/"
 
 
 def _data_uri(data: bytes, mime: str) -> str:
@@ -45,15 +46,19 @@ def model_viewer_html(glb: bytes, usdz: bytes | None = None, *, height: int = 48
 def usdz_viewer_html(usdz: bytes, *, height: int = 480) -> str:
     """Best-effort HTML rendering the actual ``.usdz`` via three.js USDZLoader (experimental)."""
     b64 = base64.b64encode(usdz).decode("ascii")
+    # The three.js example modules import the bare specifiers "three" / "three/addons/";
+    # an import map is REQUIRED or the module load silently fails (blank viewer).
+    importmap = json.dumps({"imports": {"three": _THREE_CDN, "three/addons/": _THREE_ADDONS}})
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
+<script type="importmap">{importmap}</script>
 <style>html,body{{margin:0;background:#15151a}} #wrap{{width:100%;height:{height}px}}
 #err{{color:#f88;font:14px sans-serif;padding:1em}}</style>
 </head><body><div id="wrap"></div>
 <script type="module">
-import * as THREE from "{_THREE_CDN}";
-import {{ OrbitControls }} from "{_THREE_EXAMPLES}/controls/OrbitControls.js";
-import {{ USDZLoader }} from "{_THREE_EXAMPLES}/loaders/USDZLoader.js";
+import * as THREE from "three";
+import {{ OrbitControls }} from "three/addons/controls/OrbitControls.js";
+import {{ USDZLoader }} from "three/addons/loaders/USDZLoader.js";
 const wrap = document.getElementById("wrap");
 const w = wrap.clientWidth || 640, h = {height};
 const renderer = new THREE.WebGLRenderer({{antialias:true, alpha:true}});

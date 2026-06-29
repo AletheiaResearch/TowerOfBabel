@@ -22,3 +22,7 @@ def test_usdz_viewer_html_embeds_usdz():
     html = usdz_viewer_html(b"USDZBYTES")
     assert "USDZLoader" in html
     assert base64.b64encode(b"USDZBYTES").decode() in html
+    # the import map is required for the bare "three" / "three/addons/" specifiers to resolve
+    assert '<script type="importmap">' in html
+    assert '"three":' in html and '"three/addons/":' in html
+    assert 'from "three"' in html

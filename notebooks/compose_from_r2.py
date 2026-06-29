@@ -55,12 +55,15 @@ def _():
         r2_error = None
     except Exception as exc:  # noqa: BLE001 - surfaced as a friendly notebook message
         store, r2_error = None, str(exc)
-    usd_dir = Path(tempfile.gettempdir()) / "usd-pipeline-notebook-r2"
+    workdir = Path(tempfile.gettempdir()) / "usd-pipeline-notebook-r2"
+    usd_dir = workdir / "usd"
+    preview_dir = workdir / "preview"  # where the GLB is staged for the viewer
     return (
         Manifest,
         Path,
         compose_asset,
         model_viewer_html,
+        preview_dir,
         r2_error,
         settings,
         store,
@@ -145,11 +148,10 @@ def _(
     manifest,
     mo,
     model_viewer_html,
+    preview_dir,
     store,
     usdz_viewer_html,
 ):
-    import tempfile
-
     if compose_result["status"] != "done":
         view = mo.md(
             f"**{asset_id}** is not composable "
@@ -157,7 +159,8 @@ def _(
         ).callout(kind="warn")
     else:
         steps = manifest.data["assets"][asset_id]["steps"]
-        glb_tmp = Path(tempfile.mkdtemp()) / "textured.glb"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        glb_tmp = preview_dir / "textured.glb"
         store.download_to(steps["texture"]["keys"]["artifact"], glb_tmp)
         glb = glb_tmp.read_bytes()
 

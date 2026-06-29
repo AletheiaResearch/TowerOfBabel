@@ -1,0 +1,84 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.23.11",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "1d0db38904205bec4d6f6f6a1f6cec3e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "a6b0f6ca36b2c9819defe89bd0edc810",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"palatial-usdusdz-explorer\">Palatial \u2192 USD/USDz explorer</h1>\n<span class=\"paragraph\">Pick an asset from the library, acquire its parts, compose a rigid-body USD, and\npreview it \u2014 all locally, no R2 credentials needed.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "0c513dd5714c4c2548e1876b0e425519",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "4369391c644efa1f2ab58f5a6144809e",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "b41aec15a643bcb7da6248f001a998f2",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "d521f765a49c72507257a2620612ee96",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "9497e39665ef3c37b3c3ff9731012057",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "c737d281460a621e26be1290502d543a",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "131a53a50c51a5743b032db34d944fad",
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

@@ -10,7 +10,7 @@ public Palatial API — no Cloudflare R2 credentials required.
 
 import marimo
 
-__generated_with = "0.9.0"
+__generated_with = "0.23.11"
 app = marimo.App(width="medium")
 
 
@@ -23,14 +23,12 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        # Palatial → USD/USDz explorer
+    mo.md("""
+    # Palatial → USD/USDz explorer
 
-        Pick an asset from the library, acquire its parts, compose a rigid-body USD, and
-        preview it — all locally, no R2 credentials needed.
-        """
-    )
+    Pick an asset from the library, acquire its parts, compose a rigid-body USD, and
+    preview it — all locally, no R2 credentials needed.
+    """)
     return
 
 
@@ -53,19 +51,18 @@ def _():
     workdir = Path(tempfile.gettempdir()) / "usd-pipeline-notebook"
     store = LocalStore(workdir / "data")
     usd_dir = workdir / "usd"
+    preview_dir = workdir / "preview"  # where the GLB is staged for the viewer
     return (
-        LocalStore,
         PalatialClient,
         Path,
-        Settings,
         acquire_asset,
         compose_asset,
         model_viewer_html,
+        preview_dir,
         settings,
         store,
         usd_dir,
         usdz_viewer_html,
-        workdir,
     )
 
 
@@ -89,7 +86,7 @@ def _(mo, results):
     ]
     library = mo.ui.table(rows, selection="single", page_size=12, label="Library")
     mo.md(f"**{len(rows)} assets.** Search/sort, then select one row:")
-    return library, rows
+    return (library,)
 
 
 @app.cell
@@ -106,7 +103,16 @@ def _(mo):
 
 
 @app.cell
-def _(acquire_asset, compose_asset, library, mo, run, settings, store, usd_dir):
+def _(
+    acquire_asset,
+    compose_asset,
+    library,
+    mo,
+    run,
+    settings,
+    store,
+    usd_dir,
+):
     mo.stop(
         not run.value,
         mo.md("*Select an asset above, then click the button.*").callout(kind="neutral"),
@@ -134,11 +140,10 @@ def _(
     manifest,
     mo,
     model_viewer_html,
+    preview_dir,
     store,
     usdz_viewer_html,
 ):
-    import tempfile
-
     if compose_result["status"] != "done":
         view = mo.md(
             f"**{asset_id}** is not composable "
@@ -147,8 +152,9 @@ def _(
     else:
         steps = manifest.data["assets"][asset_id]["steps"]
 
-        # textured render mesh (the GLB the USD wraps), read from the store
-        glb_tmp = Path(tempfile.mkdtemp()) / "textured.glb"
+        # textured render mesh (the GLB the USD wraps), staged locally for the viewer
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        glb_tmp = preview_dir / "textured.glb"
         store.download_to(steps["texture"]["keys"]["artifact"], glb_tmp)
         glb = glb_tmp.read_bytes()
 
