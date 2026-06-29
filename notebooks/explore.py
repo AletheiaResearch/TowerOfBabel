@@ -43,6 +43,7 @@ def _():
         Settings,
         acquire_asset,
         compose_asset,
+        compose_usd,
         model_viewer_html,
         usdz_viewer_html,
     )
@@ -51,12 +52,13 @@ def _():
     workdir = Path(tempfile.gettempdir()) / "usd-pipeline-notebook"
     store = LocalStore(workdir / "data")
     usd_dir = workdir / "usd"
-    preview_dir = workdir / "preview"  # where the GLB is staged for the viewer
+    preview_dir = workdir / "preview"  # where the GLB / preview USD is staged for the viewer
     return (
         PalatialClient,
         Path,
         acquire_asset,
         compose_asset,
+        compose_usd,
         model_viewer_html,
         preview_dir,
         settings,
@@ -137,6 +139,7 @@ def _(
     Path,
     asset_id,
     compose_result,
+    compose_usd,
     manifest,
     mo,
     model_viewer_html,
@@ -158,10 +161,17 @@ def _(
         store.download_to(steps["texture"]["keys"]["artifact"], glb_tmp)
         glb = glb_tmp.read_bytes()
 
-        # composed outputs (local usd dir)
+        # composed outputs (local usd dir): full physics .usdz for download / AR
         local = Path(compose_result["local"])
         usdz = next(local.glob("*.usdz")).read_bytes()
         png = next(local.glob("*_basecolor.png"), None)
+
+        # three.js USDZLoader can't parse PhysX schemas -> feed it a visual-only USD
+        compose_usd(
+            str(glb_tmp), out_path=str(preview_dir / "preview.usda"),
+            physics=False, usdz=True, delight=True, verbose=False,
+        )
+        preview_usdz = (preview_dir / "preview.usdz").read_bytes()
 
         # physics summary
         phys = store.get_json(steps["embedded-physics"]["keys"]["file"]) or {}
@@ -180,7 +190,7 @@ def _(
         tabs = mo.ui.tabs(
             {
                 "GLB (model-viewer)": mo.iframe(model_viewer_html(glb, usdz)),
-                "USDZ (three.js · experimental)": mo.iframe(usdz_viewer_html(usdz)),
+                "USD (three.js · visual-only)": mo.iframe(usdz_viewer_html(preview_usdz)),
             }
         )
         view = mo.vstack(

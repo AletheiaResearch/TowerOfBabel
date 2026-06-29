@@ -22,6 +22,9 @@ dependencies = [
     "pillow>=10.3",
     "networkx>=3.2",
     "scipy>=1.11",  # trimesh uses it for fast (sparse) vertex-normal computation
+    "nbformat>=5.10.4",
+    "nbconvert>=7.17.1",
+    "playwright>=1.61.0",
 ]
 
 [project.optional-dependencies]

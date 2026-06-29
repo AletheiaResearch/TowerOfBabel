@@ -23,6 +23,8 @@ Non-obvious choices (each deliberate):
     so omni.physx reads them and they schema-validate once Isaac registers the schemas.
   * ``delight`` clips the baked specular highlights Palatial paints into albedos so the
     asset looks right in viewers you do not control.
+  * ``physics=False`` authors a visual-only USD (render mesh + material, no PhysX) — for
+    web viewers (e.g. three.js USDZLoader) that can't parse the physics schemas.
 
 Scope: a single rigid body (``physics_type``/object type "rigid_bodies"). Articulated
 assets (non-empty joint relations) need joint + drive authoring this does not do.
@@ -182,78 +184,10 @@ def _add_api_schemas(prim: Usd.Prim, names: list[str]) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# main entry
+# physics authoring (skipped entirely for a visual-only USD)
 # --------------------------------------------------------------------------- #
-def compose_usd(
-    textured_glb: str,
-    collision_glb: str,
-    physics_json: str,
-    out_path: str,
-    *,
-    inertia: str = "auto",
-    delight: bool = False,
-    flip_v: bool = True,
-    usdz: bool = False,
-    name: str | None = None,
-    verbose: bool = True,
-) -> dict[str, str | None]:
-    """Compose a rigid-body USD from Palatial parts.
-
-    Args:
-        textured_glb: render mesh GLB (real-world scale, baked PBR material).
-        collision_glb: convex-hull decomposition GLB (1..N hull meshes).
-        physics_json: Palatial 'newton' physics spec (mass/inertia/friction/CCD/...).
-        out_path: output ``.usd`` / ``.usda`` / ``.usdc`` path; a ``<stem>_basecolor.png``
-            is written alongside it.
-        inertia: ``"auto"`` (tensor if present, else PhysX-derive) | ``"predicted"`` |
-            ``"derive"``.
-        delight: clip baked specular highlights out of the albedo (cross-viewer fix).
-        flip_v: flip texture V (set False if the texture appears vertically mirrored).
-        usdz: also write a self-contained ``.usdz`` package.
-        name: override the prim/asset name.
-
-    Returns:
-        ``{"usd": path, "texture": path | None, "usdz": path | None}``.
-    """
-
-    def log(*args: object) -> None:
-        if verbose:
-            print(*args, file=sys.stderr)
-
-    with open(physics_json) as fh:
-        spec = _unwrap(json.load(fh))
-    part = _pick_part(spec)
-    newton = part.get("newton", {})
-    coll = newton.get("collisions", {})
-    sim = newton.get("simulation_scene", {})
-    grav = sim.get("gravitational_acceleration", [0, 0, -9.81])
-
-    name = _safe_name(name or part.get("part_name") or spec.get("base_link") or "Asset")
-    out_path = os.path.abspath(out_path)
-    out_dir = os.path.dirname(out_path) or "."
-    stem = os.path.splitext(os.path.basename(out_path))[0]
-    os.makedirs(out_dir, exist_ok=True)
-    for stale in (out_path, os.path.splitext(out_path)[0] + ".usdz"):  # idempotent re-runs
-        if os.path.exists(stale):
-            os.remove(stale)
-
-    has_tensor = part.get("inertia") is not None
-    if inertia == "predicted" and not has_tensor:
-        raise ValueError("inertia='predicted' but the JSON tensor is null")
-    use_tensor = inertia == "predicted" or (inertia == "auto" and has_tensor)
-    log(f"[compose] {name}  inertia={'predicted' if use_tensor else 'PhysX-derived'}")
-
-    # --- stage -------------------------------------------------------------- #
-    stage = Usd.Stage.CreateNew(out_path)
-    UsdGeom.SetStageUpAxis(stage, _up_axis_from_gravity(grav))
-    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
-    stage.SetMetadata("kilogramsPerUnit", 1.0)
-
-    root = UsdGeom.Xform.Define(stage, f"/{name}")
-    stage.SetDefaultPrim(root.GetPrim())
-    rb = root.GetPrim()
-
-    # --- rigid body + mass -------------------------------------------------- #
+def _author_physics(stage, name, rb, part, coll, sim, *, use_tensor, collision_glb, log) -> None:
+    """Author the rigid body, mass, physics material, and convex-hull colliders."""
     UsdPhysics.RigidBodyAPI.Apply(rb)
     mass_api = UsdPhysics.MassAPI.Apply(rb)
     mass = float(part.get("mass") or 0.0)
@@ -272,7 +206,6 @@ def compose_usd(
     )
     _add_api_schemas(rb, ["PhysxRigidBodyAPI"])
 
-    # --- physics material --------------------------------------------------- #
     pmat = UsdShade.Material.Define(stage, f"/{name}/PhysicsMaterials/body")
     pm = pmat.GetPrim()
     pm_api = UsdPhysics.MaterialAPI.Apply(pm)
@@ -289,7 +222,6 @@ def compose_usd(
     )
     _add_api_schemas(pm, ["PhysxMaterialAPI"])
 
-    # --- collision hulls ---------------------------------------------------- #
     UsdGeom.Scope.Define(stage, f"/{name}/Collisions")
     hull_count = 0
     for hull_name, geom in _load_geoms(collision_glb):
@@ -313,7 +245,121 @@ def compose_usd(
         hull_count += 1
     log(f"[compose] colliders: {hull_count} convex hull(s)")
 
-    # --- render mesh + visual material -------------------------------------- #
+
+def _author_physics_scene(stage, grav, sim) -> None:
+    scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
+    gv = Gf.Vec3f(*map(float, grav))
+    mag = float(gv.GetLength())
+    scene.CreateGravityDirectionAttr(gv / mag if mag else Gf.Vec3f(0, 0, -1))
+    scene.CreateGravityMagnitudeAttr(mag or 9.81)
+    sp = scene.GetPrim()
+    sp.CreateAttribute("physxScene:timeStepsPerSecond", Sdf.ValueTypeNames.UInt).Set(
+        int(sim.get("simulation_steps_per_second", 60))
+    )
+    sp.CreateAttribute("physxScene:enableCCD", Sdf.ValueTypeNames.Bool).Set(
+        bool(sim.get("enable_ccd", True))
+    )
+    _add_api_schemas(sp, ["PhysxSceneAPI"])
+
+
+# --------------------------------------------------------------------------- #
+# main entry
+# --------------------------------------------------------------------------- #
+def compose_usd(
+    textured_glb: str,
+    collision_glb: str | None = None,
+    physics_json: str | None = None,
+    out_path: str = "asset.usda",
+    *,
+    physics: bool = True,
+    inertia: str = "auto",
+    delight: bool = False,
+    flip_v: bool = True,
+    usdz: bool = False,
+    name: str | None = None,
+    verbose: bool = True,
+) -> dict[str, str | None]:
+    """Compose a rigid-body USD from Palatial parts.
+
+    Args:
+        textured_glb: render mesh GLB (real-world scale, baked PBR material).
+        collision_glb: convex-hull decomposition GLB (1..N hull meshes). Required when
+            ``physics=True``; ignored when ``physics=False``.
+        physics_json: Palatial 'newton' physics spec (mass/inertia/friction/CCD/...).
+            Required when ``physics=True``; ignored when ``physics=False``.
+        out_path: output ``.usd`` / ``.usda`` / ``.usdc`` path; a ``<stem>_basecolor.png``
+            is written alongside it.
+        physics: author rigid body, mass, physics material, collision hulls, and physics
+            scene. ``False`` -> visual-only USD (render mesh + material) for web viewers
+            (e.g. three.js USDZLoader) that can't parse the PhysX schemas.
+        inertia: ``"auto"`` (tensor if present, else PhysX-derive) | ``"predicted"`` |
+            ``"derive"``.
+        delight: clip baked specular highlights out of the albedo (cross-viewer fix).
+        flip_v: flip texture V (set False if the texture appears vertically mirrored).
+        usdz: also write a self-contained ``.usdz`` package.
+        name: override the prim/asset name.
+
+    Returns:
+        ``{"usd": path, "texture": path | None, "usdz": path | None}``.
+    """
+
+    def log(*args: object) -> None:
+        if verbose:
+            print(*args, file=sys.stderr)
+
+    if physics:
+        if not (collision_glb and physics_json):
+            raise ValueError("physics=True requires collision_glb and physics_json")
+        with open(physics_json) as fh:
+            spec = _unwrap(json.load(fh))
+        part = _pick_part(spec)
+        newton = part.get("newton", {})
+        coll = newton.get("collisions", {})
+        sim = newton.get("simulation_scene", {})
+        grav = sim.get("gravitational_acceleration", [0, 0, -9.81])
+    else:
+        spec, part, coll, sim = {}, {}, {}, {}
+        grav = [0, 0, -9.81]
+
+    name = _safe_name(name or part.get("part_name") or spec.get("base_link") or "Asset")
+    out_path = os.path.abspath(out_path)
+    out_dir = os.path.dirname(out_path) or "."
+    stem = os.path.splitext(os.path.basename(out_path))[0]
+    os.makedirs(out_dir, exist_ok=True)
+    for stale in (out_path, os.path.splitext(out_path)[0] + ".usdz"):  # idempotent re-runs
+        if os.path.exists(stale):
+            os.remove(stale)
+
+    has_tensor = part.get("inertia") is not None
+    if physics and inertia == "predicted" and not has_tensor:
+        raise ValueError("inertia='predicted' but the JSON tensor is null")
+    use_tensor = inertia == "predicted" or (inertia == "auto" and has_tensor)
+    log(f"[compose] {name}  physics={physics} inertia={'predicted' if use_tensor else 'derived'}")
+
+    # --- stage -------------------------------------------------------------- #
+    stage = Usd.Stage.CreateNew(out_path)
+    UsdGeom.SetStageUpAxis(stage, _up_axis_from_gravity(grav))
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    stage.SetMetadata("kilogramsPerUnit", 1.0)
+
+    root = UsdGeom.Xform.Define(stage, f"/{name}")
+    stage.SetDefaultPrim(root.GetPrim())
+    rb = root.GetPrim()
+
+    if physics:
+        _author_physics(
+            stage,
+            name,
+            rb,
+            part,
+            coll,
+            sim,
+            use_tensor=use_tensor,
+            collision_glb=collision_glb,
+            log=log,
+        )
+
+    # --- render mesh + visual material (always) ----------------------------- #
     UsdGeom.Scope.Define(stage, f"/{name}/Render")
     render_geoms = list(_load_geoms(textured_glb))
     if len(render_geoms) > 1:
@@ -369,20 +415,8 @@ def compose_usd(
     )
     UsdShade.MaterialBindingAPI.Apply(render_mesh.GetPrim()).Bind(look)
 
-    # --- physics scene ------------------------------------------------------ #
-    scene = UsdPhysics.Scene.Define(stage, "/PhysicsScene")
-    gv = Gf.Vec3f(*map(float, grav))
-    mag = float(gv.GetLength())
-    scene.CreateGravityDirectionAttr(gv / mag if mag else Gf.Vec3f(0, 0, -1))
-    scene.CreateGravityMagnitudeAttr(mag or 9.81)
-    sp = scene.GetPrim()
-    sp.CreateAttribute("physxScene:timeStepsPerSecond", Sdf.ValueTypeNames.UInt).Set(
-        int(sim.get("simulation_steps_per_second", 60))
-    )
-    sp.CreateAttribute("physxScene:enableCCD", Sdf.ValueTypeNames.Bool).Set(
-        bool(sim.get("enable_ccd", True))
-    )
-    _add_api_schemas(sp, ["PhysxSceneAPI"])
+    if physics:
+        _author_physics_scene(stage, grav, sim)
 
     stage.GetRootLayer().Save()
     log(f"[compose] wrote {out_path}")

@@ -43,6 +43,7 @@ def _():
         Manifest,
         Settings,
         compose_asset,
+        compose_usd,
         model_viewer_html,
         usdz_viewer_html,
     )
@@ -62,6 +63,7 @@ def _():
         Manifest,
         Path,
         compose_asset,
+        compose_usd,
         model_viewer_html,
         preview_dir,
         r2_error,
@@ -145,6 +147,7 @@ def _(
     Path,
     asset_id,
     compose_result,
+    compose_usd,
     manifest,
     mo,
     model_viewer_html,
@@ -168,6 +171,13 @@ def _(
         usdz = next(local.glob("*.usdz")).read_bytes()
         png = next(local.glob("*_basecolor.png"), None)
 
+        # three.js USDZLoader can't parse PhysX schemas -> feed it a visual-only USD
+        compose_usd(
+            str(glb_tmp), out_path=str(preview_dir / "preview.usda"),
+            physics=False, usdz=True, delight=True, verbose=False,
+        )
+        preview_usdz = (preview_dir / "preview.usdz").read_bytes()
+
         phys = store.get_json(steps["embedded-physics"]["keys"]["file"]) or {}
         part = ((phys.get("data") or phys).get("parts") or [{}])[0]
         meta = mo.md(
@@ -184,7 +194,7 @@ def _(
         tabs = mo.ui.tabs(
             {
                 "GLB (model-viewer)": mo.iframe(model_viewer_html(glb, usdz)),
-                "USDZ (three.js · experimental)": mo.iframe(usdz_viewer_html(usdz)),
+                "USD (three.js · visual-only)": mo.iframe(usdz_viewer_html(preview_usdz)),
             }
         )
         view = mo.vstack(
