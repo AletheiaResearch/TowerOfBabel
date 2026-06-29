@@ -47,3 +47,12 @@ def test_delete_prefix(tmp_path):
     assert not store.exists("usd/a1/a1.usda")
     assert store.exists("usd/a2/a2.usda")
     assert store.delete_prefix("usd/missing/") == 0
+
+
+def test_list_dir(tmp_path):
+    store = LocalStore(tmp_path)
+    store.put_bytes("runs/r2/manifest.json", b"{}")
+    store.put_bytes("runs/r1/manifest.json", b"{}")
+    store.put_bytes("runs/r1/a1/detail.json", b"{}")
+    assert store.list_dir("runs/") == ["r1", "r2"]
+    assert store.list_dir("nope/") == []

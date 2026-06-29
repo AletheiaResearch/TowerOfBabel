@@ -76,16 +76,20 @@ print(ledger.stats())
 compose_usd("textured.glb", "collision.glb", "physics.json", "out/asset.usda", usdz=True)
 ```
 
-## Notebook
+## Notebooks
 
-An interactive [marimo](https://marimo.io) notebook drives the whole flow — browse the
-library, pick one asset, acquire just that asset, compose its USD/USDz, and preview it
-(textured GLB via `<model-viewer>`, plus a best-effort three.js render of the actual
-`.usdz`, and a download/AR link). It runs entirely against the public Palatial API into a
-local temp dir — **no R2 credentials needed**.
+Interactive [marimo](https://marimo.io) notebooks. Each previews a composed asset with a
+textured GLB via `<model-viewer>`, a best-effort three.js render of the actual `.usdz`, and
+a download/AR link.
 
 ```bash
+# Self-contained: browse library → pick one → acquire → compose → preview.
+# Public Palatial API into a local temp dir — no R2 credentials needed.
 uv run --extra notebook marimo edit notebooks/explore.py
+
+# Compose from an already-acquired R2 run: pick run → pick asset → compose → preview.
+# Reads/writes Cloudflare R2 — requires credentials in .env.
+uv run --extra notebook marimo edit notebooks/compose_from_r2.py
 ```
 
 ## How it works

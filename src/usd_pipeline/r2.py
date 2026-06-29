@@ -115,6 +115,18 @@ class R2Store:
                 deleted += len(batch)
         return deleted
 
+    def list_dir(self, prefix: str) -> list[str]:
+        if prefix and not prefix.endswith("/"):
+            prefix += "/"
+        paginator = self._client.get_paginator("list_objects_v2")
+        names: list[str] = []
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix, Delimiter="/"):
+            for cp in page.get("CommonPrefixes", []):
+                name = cp["Prefix"][len(prefix) :].rstrip("/")
+                if name:
+                    names.append(name)
+        return sorted(names)
+
     def exists(self, key: str) -> bool:
         try:
             self._client.head_object(Bucket=self.bucket, Key=key)

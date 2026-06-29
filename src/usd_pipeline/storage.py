@@ -19,6 +19,7 @@ class Store(Protocol):
     def get_json(self, key: str) -> object | None: ...
     def download_to(self, key: str, dest: str | Path) -> None: ...
     def delete_prefix(self, prefix: str) -> int: ...
+    def list_dir(self, prefix: str) -> list[str]: ...
     def exists(self, key: str) -> bool: ...
 
 
@@ -67,6 +68,12 @@ class LocalStore:
             shutil.rmtree(base)
             return count
         return 0
+
+    def list_dir(self, prefix: str) -> list[str]:
+        base = self.root / prefix
+        if not base.is_dir():
+            return []
+        return sorted(p.name for p in base.iterdir() if p.is_dir())
 
     def exists(self, key: str) -> bool:
         return (self.root / key).exists()

@@ -68,3 +68,13 @@ def test_delete_prefix(r2):
     assert n == 2
     assert not r2.exists("usd/a1/a1.usda")
     assert r2.exists("usd/a2/a2.usda")
+
+
+def test_list_dir(r2):
+    r2.put_bytes("runs/r2/manifest.json", b"{}")
+    r2.put_bytes("runs/r1/manifest.json", b"{}")
+    r2.put_bytes("runs/r1/a1/detail.json", b"{}")
+    r2.put_bytes("other/x.txt", b"x")
+    assert r2.list_dir("runs/") == ["r1", "r2"]
+    assert r2.list_dir("runs") == ["r1", "r2"]  # trailing slash optional
+    assert r2.list_dir("nope/") == []
